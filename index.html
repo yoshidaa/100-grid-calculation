@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>百ます計算</title>
+  <style>
+    :root{
+      --bg: #0b0f17;
+      --panel: #12192a;
+      --text: #e9eefc;
+      --muted: #a9b4d1;
+      --line: rgba(255,255,255,.12);
+      --ok: rgba(80, 220, 140, .35);
+      --ng: rgba(255, 90, 90, .35);
+      --cell: clamp(1.9rem, 6.6vw, 2.4rem);
+      --header: clamp(2.2rem, 7.4vw, 2.8rem);
+      --radius: 12px;
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", sans-serif;
+      background: linear-gradient(180deg, #070a10 0%, var(--bg) 70%);
+      color: var(--text);
+    }
+
+    .wrap{
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 14px 12px 28px;
+    }
+
+    header{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom: 10px;
+    }
+
+    h1{
+      font-size: 18px;
+      margin:0;
+      letter-spacing: .02em;
+    }
+
+    .toolbar{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap: wrap;
+      justify-content:flex-end;
+    }
+
+    button, select{
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      padding: 9px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      line-height: 1;
+    }
+    button{
+      cursor:pointer;
+    }
+    button:disabled{
+      opacity:.45;
+      cursor:not-allowed;
+    }
+
+    .panel{
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+      margin-top: 12px;
+    }
+
+    .row{
+      display:flex;
+      gap:12px;
+      flex-wrap: wrap;
+      align-items:center;
+      justify-content: space-between;
+    }
+
+    .left{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+
+    .hint{
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    .timer{
+      font-variant-numeric: tabular-nums;
+      letter-spacing:.02em;
+      font-size: 16px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,.20);
+    }
+
+    /* Grid */
+    .gridWrap{
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 6px;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns: var(--header) repeat(10, var(--cell));
+      grid-auto-rows: var(--cell);
+      gap: 6px;
+      width: max-content;
+      margin: 0 auto;
+      padding: 10px 6px 6px;
+    }
+
+    .corner{
+      display:flex; align-items:center; justify-content:center;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--muted);
+      background: rgba(255,255,255,.03);
+      font-size: 12px;
+    }
+
+    .head{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255,255,255,.05);
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      user-select:none;
+    }
+
+    input.answer{
+      width: 100%;
+      height: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,.18);
+      color: var(--text);
+      text-align: center;
+      font-size: 16px;
+      font-variant-numeric: tabular-nums;
+      outline: none;
+    }
+    input.answer:focus{
+      border-color: rgba(255,255,255,.35);
+      box-shadow: 0 0 0 2px rgba(255,255,255,.10);
+    }
+
+    input.answer.correct{
+      background: linear-gradient(180deg, rgba(80,220,140,.20), rgba(0,0,0,.18));
+      border-color: var(--ok);
+    }
+    input.answer.wrong{
+      background: linear-gradient(180deg, rgba(255,90,90,.20), rgba(0,0,0,.18));
+      border-color: var(--ng);
+    }
+
+    /* Maker */
+    .makerGrid{
+      display:grid;
+      grid-template-columns: repeat(10, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .makerGrid input{
+      width: 100%;
+      padding: 10px 8px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,.18);
+      color: var(--text);
+      text-align:center;
+      font-size: 14px;
+      font-variant-numeric: tabular-nums;
+    }
+    .sectionTitle{
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .result{
+      margin-top: 10px;
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text);
+      white-space: pre-line;
+    }
+
+    .modeBadge{
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      background: rgba(255,255,255,.04);
+    }
+
+    @media (max-width: 420px){
+      .timer{ font-size: 14px; }
+      button, select{ padding: 9px 10px; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <h1>百ます計算</h1>
+      <div class="toolbar">
+        <span id="modeBadge" class="modeBadge">解答モード</span>
+        <select id="opSelect" aria-label="演算">
+          <option value="add">＋（たし算）</option>
+          <option value="sub">−（ひき算：左 − 上）</option>
+        </select>
+        <button id="toggleModeBtn">作問モードへ</button>
+      </div>
+    </header>
+
+    <!-- Maker panel -->
+    <section id="makerPanel" class="panel" style="display:none;">
+      <div class="row">
+        <div class="left">
+          <p class="sectionTitle">上段10個（values の先頭10文字）</p>
+        </div>
+        <div class="left">
+          <button id="randomBtn">ランダム生成（0～99）</button>
+          <button id="applyUrlBtn">URLに反映</button>
+          <button id="copyUrlBtn">URLをコピー</button>
+        </div>
+      </div>
+
+      <div id="topInputs" class="makerGrid" aria-label="上段の値"></div>
+
+      <div style="height:10px;"></div>
+
+      <p class="sectionTitle">左列10個（values の後半10文字）</p>
+      <div id="leftInputs" class="makerGrid" aria-label="左列の値"></div>
+
+      <div class="hint">
+        ・values は 1文字 = 0〜35（0-9A-Z）の base36 でエンコードします（20文字）。<br>
+        ・作問が終わったら「URLに反映」を押して、そのURLを共有してください。
+      </div>
+    </section>
+
+    <!-- Game panel -->
+    <section id="gamePanel" class="panel">
+      <div class="row">
+        <div class="left">
+          <button id="startBtn">スタート</button>
+          <button id="finishBtn" disabled>終わる</button>
+          <button id="resetBtn">リセット</button>
+        </div>
+        <div class="left">
+          <div id="timer" class="timer">00:00.000</div>
+        </div>
+      </div>
+
+      <div class="gridWrap">
+        <div id="grid" class="grid" aria-label="百ます"></div>
+      </div>
+
+      <div id="result" class="result"></div>
+
+      <div class="hint">
+        ・各マスで Enter を押すと、右へ移動します（右端では次の行の左端）。<br>
+        ・URL の ?values=... と ?op=... を読むので、リンク共有で同じ問題を再現できます。
+      </div>
+    </section>
+  </div>
+
+<script>
+(() => {
+  const SIZE = 10;
+  const DEFAULT_RANGE = { min: 0, max: 99 }; // ランダム生成用（0〜99）
+
+  const els = {
+    opSelect: document.getElementById('opSelect'),
+    toggleModeBtn: document.getElementById('toggleModeBtn'),
+    modeBadge: document.getElementById('modeBadge'),
+
+    makerPanel: document.getElementById('makerPanel'),
+    gamePanel: document.getElementById('gamePanel'),
+
+    topInputs: document.getElementById('topInputs'),
+    leftInputs: document.getElementById('leftInputs'),
+    randomBtn: document.getElementById('randomBtn'),
+    applyUrlBtn: document.getElementById('applyUrlBtn'),
+    copyUrlBtn: document.getElementById('copyUrlBtn'),
+
+    startBtn: document.getElementById('startBtn'),
+    finishBtn: document.getElementById('finishBtn'),
+    resetBtn: document.getElementById('resetBtn'),
+    timer: document.getElementById('timer'),
+    grid: document.getElementById('grid'),
+    result: document.getElementById('result'),
+  };
+
+  const state = {
+    mode: 'solve', // 'make' | 'solve'
+    op: 'add',
+    top: new Array(SIZE).fill(0),
+    left: new Array(SIZE).fill(0),
+    started: false,
+    startAt: 0,
+    timerId: null,
+    answerInputs: [], // 100 inputs
+  };
+
+  function pad2(n){ return String(n).padStart(2,'0'); }
+  function pad3(n){ return String(n).padStart(3,'0'); }
+
+  function formatMs(ms){
+    const m = Math.floor(ms / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    const r = Math.floor(ms % 1000);
+    return `${pad2(m)}:${pad2(s)}.${pad3(r)}`;
+  }
+
+  function normalizeNumberString(s){
+    // 全角数字 → 半角
+    return (s ?? '')
+      .trim()
+      .replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0))
+      .replace(/[＋]/g, '+')
+      .replace(/[－−]/g, '-');
+  }
+
+  function opFn(op){
+    switch(op){
+      case 'add': return (l,t) => l + t;
+      case 'sub': return (l,t) => l - t; // 左 − 上
+      case 'mul':
+      default: return (l,t) => l * t;
+    }
+  }
+
+  // values: 20 chars, each base36 (0-9A-Z) => 0..35
+  function encodeValues(arr20){
+    return arr20.map(v => {
+      const x = clampInt(v, 0, 35);
+      return x.toString(36).toUpperCase();
+    }).join('');
+  }
+
+  function decodeValues(str){
+    const s = (str ?? '').trim().toUpperCase();
+    if(s.length < 20) return null;
+    const arr = [];
+    for(let i=0; i<20; i++){
+      const v = parseInt(s[i], 36);
+      if(Number.isNaN(v)) return null;
+      arr.push(v);
+    }
+    return arr;
+  }
+
+  function clampInt(v, min, max){
+    const n = Number(v);
+    if(!Number.isFinite(n)) return min;
+    return Math.max(min, Math.min(max, Math.trunc(n)));
+  }
+
+  function randInt(min, max){
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function setMode(mode){
+    state.mode = mode;
+    if(mode === 'make'){
+      els.makerPanel.style.display = '';
+      els.gamePanel.style.display = 'none';
+      els.toggleModeBtn.textContent = '解答モードへ';
+      els.modeBadge.textContent = '作問モード';
+    }else{
+      els.makerPanel.style.display = 'none';
+      els.gamePanel.style.display = '';
+      els.toggleModeBtn.textContent = '作問モードへ';
+      els.modeBadge.textContent = '解答モード';
+    }
+  }
+
+  function getParams(){
+    return new URLSearchParams(location.search);
+  }
+
+  function applyFromUrl(){
+    const params = getParams();
+
+    // op
+    const op = params.get('op');
+    state.op = (op === 'add' || op === 'sub' || op === 'mul') ? op : 'mul';
+    els.opSelect.value = state.op;
+
+    // values
+    const valuesStr = params.get('values');
+    const decoded = decodeValues(valuesStr);
+    if(decoded){
+      state.top = decoded.slice(0, 10);
+      state.left = decoded.slice(10, 20);
+    }else{
+      // 初期値：ランダム（1〜9）
+      randomizeValues(DEFAULT_RANGE.min, DEFAULT_RANGE.max);
+    }
+
+    // mode
+    const mode = params.get('mode');
+    setMode(mode === 'make' ? 'make' : 'solve');
+
+    renderMakerInputs();
+    renderGridHeaders();
+  }
+
+  function updateUrl({ replace = true } = {}){
+    const params = new URLSearchParams(location.search);
+    params.set('op', state.op);
+    params.set('values', encodeValues([...state.top, ...state.left]));
+    params.set('mode', state.mode === 'make' ? 'make' : 'solve');
+
+    const newUrl = `${location.pathname}?${params.toString()}`;
+    if(replace) history.replaceState(null, '', newUrl);
+    else history.pushState(null, '', newUrl);
+  }
+
+  function randomizeValues(min, max){
+    state.top = Array.from({length: 10}, () => randInt(min, max));
+    state.left = Array.from({length: 10}, () => randInt(min, max));
+  }
+
+  function renderMakerInputs(){
+    els.topInputs.innerHTML = '';
+    els.leftInputs.innerHTML = '';
+
+    const makeInput = (idx, kind) => {
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.min = '0';
+      input.max = '35';
+      input.step = '1';
+      input.value = String(kind === 'top' ? state.top[idx] : state.left[idx]);
+      input.setAttribute('aria-label', (kind === 'top' ? `上${idx+1}` : `左${idx+1}`));
+
+      input.addEventListener('input', () => {
+        const v = clampInt(input.value, 0, 35);
+        input.value = String(v);
+        if(kind === 'top') state.top[idx] = v;
+        else state.left[idx] = v;
+        renderGridHeaders();
+      });
+
+      return input;
+    };
+
+    for(let i=0; i<10; i++){
+      els.topInputs.appendChild(makeInput(i, 'top'));
+    }
+    for(let i=0; i<10; i++){
+      els.leftInputs.appendChild(makeInput(i, 'left'));
+    }
+  }
+
+  function buildGrid(){
+    els.grid.innerHTML = '';
+    state.answerInputs = [];
+
+    // 角（左上）
+    const corner = document.createElement('div');
+    corner.className = 'corner';
+    corner.textContent = ' ';
+    els.grid.appendChild(corner);
+
+    // 上段ヘッダ（10）
+    for(let c=0; c<SIZE; c++){
+      const d = document.createElement('div');
+      d.className = 'head';
+      d.dataset.head = 'top';
+      d.dataset.index = String(c);
+      els.grid.appendChild(d);
+    }
+
+    // 行ごとに：左ヘッダ + 10入力
+    for(let r=0; r<SIZE; r++){
+      const h = document.createElement('div');
+      h.className = 'head';
+      h.dataset.head = 'left';
+      h.dataset.index = String(r);
+      els.grid.appendChild(h);
+
+      for(let c=0; c<SIZE; c++){
+        const input = document.createElement('input');
+        input.className = 'answer';
+        input.type = 'text';
+        input.inputMode = 'numeric';
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+        input.dataset.r = String(r);
+        input.dataset.c = String(c);
+
+        // Enterで次へ
+        input.addEventListener('keydown', (e) => {
+          if(e.key === 'Enter'){
+            e.preventDefault();
+            focusNextCell(r, c);
+          }
+        });
+
+        // 余計な文字を軽く正規化（全角数字など）
+        input.addEventListener('blur', () => {
+          input.value = normalizeNumberString(input.value);
+        });
+
+        els.grid.appendChild(input);
+        state.answerInputs.push(input);
+      }
+    }
+  }
+
+  function renderGridHeaders(){
+    const tops = els.grid.querySelectorAll('[data-head="top"]');
+    tops.forEach(el => {
+      const i = Number(el.dataset.index);
+      el.textContent = String(state.top[i]);
+    });
+    const lefts = els.grid.querySelectorAll('[data-head="left"]');
+    lefts.forEach(el => {
+      const i = Number(el.dataset.index);
+      el.textContent = String(state.left[i]);
+    });
+  }
+
+  function cellIndex(r, c){
+    return r * SIZE + c;
+  }
+
+  function focusCell(r, c){
+    const idx = cellIndex(r, c);
+    const el = state.answerInputs[idx];
+    if(el){
+      el.focus({ preventScroll: true });
+      el.scrollIntoView({ block:'nearest', inline:'nearest' });
+    }
+  }
+
+  function focusNextCell(r, c){
+    if(r === SIZE-1 && c === SIZE-1) return; // 最後は移動なし
+    if(c < SIZE-1) focusCell(r, c+1);
+    else focusCell(r+1, 0);
+  }
+
+  function clearMarks(){
+    state.answerInputs.forEach(inp => {
+      inp.classList.remove('correct', 'wrong');
+    });
+    els.result.textContent = '';
+  }
+
+  function resetAnswers(){
+    stopTimer();
+    state.started = false;
+    els.finishBtn.disabled = true;
+    state.answerInputs.forEach(inp => inp.value = '');
+    clearMarks();
+    els.timer.textContent = '00:00.000';
+  }
+
+  function startTimer(){
+    stopTimer();
+    state.startAt = performance.now();
+    state.timerId = window.setInterval(() => {
+      const now = performance.now();
+      els.timer.textContent = formatMs(now - state.startAt);
+    }, 40);
+  }
+
+  function stopTimer(){
+    if(state.timerId){
+      clearInterval(state.timerId);
+      state.timerId = null;
+    }
+  }
+
+  function checkAnswers(){
+    const fn = opFn(state.op);
+    let ok = 0;
+    let ng = 0;
+
+    state.answerInputs.forEach(inp => {
+      const r = Number(inp.dataset.r);
+      const c = Number(inp.dataset.c);
+      const expected = fn(state.left[r], state.top[c]);
+
+      const raw = normalizeNumberString(inp.value);
+      const got = (raw === '') ? NaN : Number(raw);
+
+      const isCorrect = Number.isFinite(got) && got === expected;
+      inp.classList.remove('correct','wrong');
+      inp.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      if(isCorrect) ok++;
+      else ng++;
+    });
+
+    const elapsed = performance.now() - state.startAt;
+    els.result.textContent =
+      `結果：${ok} / ${SIZE*SIZE} 正解\n` +
+      `不正解：${ng}\n` +
+      `タイム：${formatMs(elapsed)}`;
+  }
+
+  // Events
+  els.toggleModeBtn.addEventListener('click', () => {
+    setMode(state.mode === 'make' ? 'solve' : 'make');
+    updateUrl({ replace: true });
+  });
+
+  els.opSelect.addEventListener('change', () => {
+    state.op = els.opSelect.value;
+    updateUrl({ replace: true });
+    // 解答を残したままでもよいが、混乱しやすいので軽く注意喚起兼で結果は消す
+    clearMarks();
+  });
+
+  els.randomBtn.addEventListener('click', () => {
+    randomizeValues(DEFAULT_RANGE.min, DEFAULT_RANGE.max);
+    renderMakerInputs();
+    renderGridHeaders();
+  });
+
+  els.applyUrlBtn.addEventListener('click', () => {
+    updateUrl({ replace: true });
+    // 作問モードで共有しやすいように、mode=make のままにします
+  });
+
+  els.copyUrlBtn.addEventListener('click', async () => {
+    updateUrl({ replace: true });
+    try{
+      await navigator.clipboard.writeText(location.href);
+      els.copyUrlBtn.textContent = 'コピーしました';
+      setTimeout(() => els.copyUrlBtn.textContent = 'URLをコピー', 1200);
+    }catch(_){
+      // Clipboardが使えない環境向け
+      prompt('このURLをコピーしてください', location.href);
+    }
+  });
+
+  els.startBtn.addEventListener('click', () => {
+    clearMarks();
+    state.started = true;
+    els.finishBtn.disabled = false;
+    startTimer();
+    focusCell(0,0);
+  });
+
+  els.finishBtn.addEventListener('click', () => {
+    if(!state.started) return;
+    stopTimer();
+    checkAnswers();
+    state.started = false;
+    els.finishBtn.disabled = true;
+  });
+
+  els.resetBtn.addEventListener('click', () => {
+    resetAnswers();
+    focusCell(0,0);
+  });
+
+  // Init
+  buildGrid();
+  applyFromUrl();
+
+  // 戻る/進む対応
+  window.addEventListener('popstate', () => {
+    applyFromUrl();
+    resetAnswers();
+  });
+})();
+</script>
+</body>
+</html>

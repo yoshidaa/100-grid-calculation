@@ -7,15 +7,20 @@
   <style>
     :root{
       --bg: #0b0f17;
-      --panel: #12192a;
       --text: #e9eefc;
       --muted: #a9b4d1;
       --line: rgba(255,255,255,.12);
-      --ok: rgba(80, 220, 140, .35);
-      --ng: rgba(255, 90, 90, .35);
+
       --cell: clamp(1.9rem, 6.6vw, 2.4rem);
       --header: clamp(2.2rem, 7.4vw, 2.8rem);
       --radius: 12px;
+
+      --modeAddBg: #d34242;
+      --modeSubBg: #2c6bd8;
+
+      --hl: rgba(255, 215, 0, .35);
+      --ok: rgba(80, 220, 140, .35);
+      --ng: rgba(255, 90, 90, .35);
     }
 
     *{ box-sizing:border-box; }
@@ -63,13 +68,8 @@
       font-size: 14px;
       line-height: 1;
     }
-    button{
-      cursor:pointer;
-    }
-    button:disabled{
-      opacity:.45;
-      cursor:not-allowed;
-    }
+    button{ cursor:pointer; }
+    button:disabled{ opacity:.45; cursor:not-allowed; }
 
     .panel{
       background: rgba(255,255,255,.04);
@@ -111,11 +111,28 @@
       background: rgba(0,0,0,.20);
     }
 
+    .expr{
+      margin-top: 10px;
+      text-align:center;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      letter-spacing: .01em;
+      font-size: 18px;
+      padding: 10px 10px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,.20);
+      user-select:none;
+    }
+    .expr .op.add{ color: #ffb3b3; }
+    .expr .op.sub{ color: #b7d0ff; }
+
     /* Grid */
     .gridWrap{
       overflow:auto;
       -webkit-overflow-scrolling: touch;
       padding-bottom: 6px;
+      margin-top: 8px;
     }
 
     .grid{
@@ -130,12 +147,16 @@
 
     .corner{
       display:flex; align-items:center; justify-content:center;
-      border: 1px solid var(--line);
       border-radius: 10px;
-      color: var(--muted);
-      background: rgba(255,255,255,.03);
-      font-size: 12px;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      user-select:none;
+      border: 1px solid rgba(255,255,255,.10);
+      color: #fff;
     }
+    .corner.mode-add{ background: var(--modeAddBg); }
+    .corner.mode-sub{ background: var(--modeSubBg); }
 
     .head{
       display:flex;
@@ -144,9 +165,14 @@
       border: 1px solid var(--line);
       border-radius: 10px;
       background: rgba(255,255,255,.05);
-      font-weight: 600;
+      font-weight: 650;
       font-variant-numeric: tabular-nums;
       user-select:none;
+      transition: background-color 120ms ease, border-color 120ms ease;
+    }
+    .head.active{
+      background: var(--hl);
+      border-color: rgba(255, 215, 0, .55);
     }
 
     input.answer{
@@ -219,6 +245,7 @@
     @media (max-width: 420px){
       .timer{ font-size: 14px; }
       button, select{ padding: 9px 10px; }
+      .expr{ font-size: 16px; }
     }
   </style>
 </head>
@@ -241,10 +268,15 @@
     <section id="makerPanel" class="panel" style="display:none;">
       <div class="row">
         <div class="left">
-          <p class="sectionTitle">上段10個（values の先頭10文字）</p>
+          <p class="sectionTitle">上段10個（values の先頭10個）</p>
         </div>
         <div class="left">
-          <button id="randomBtn">ランダム生成（0～99）</button>
+          <label class="sectionTitle" for="randRange">ランダム範囲</label>
+          <select id="randRange" aria-label="ランダム範囲">
+            <option value="0-9">0〜9</option>
+            <option value="0-99">0〜99</option>
+          </select>
+          <button id="randomBtn">ランダム生成</button>
           <button id="applyUrlBtn">URLに反映</button>
           <button id="copyUrlBtn">URLをコピー</button>
         </div>
@@ -254,11 +286,11 @@
 
       <div style="height:10px;"></div>
 
-      <p class="sectionTitle">左列10個（values の後半10文字）</p>
+      <p class="sectionTitle">左列10個（values の後半10個）</p>
       <div id="leftInputs" class="makerGrid" aria-label="左列の値"></div>
 
       <div class="hint">
-        ・values は 1文字 = 0〜35（0-9A-Z）の base36 でエンコードします（20文字）。<br>
+        ・数字は 0〜99。values は <b>2文字×20個</b> の base36（0-9A-Z）でエンコードします（合計40文字）。<br>
         ・作問が終わったら「URLに反映」を押して、そのURLを共有してください。
       </div>
     </section>
@@ -276,6 +308,8 @@
         </div>
       </div>
 
+      <div id="expr" class="expr" aria-live="polite">—</div>
+
       <div class="gridWrap">
         <div id="grid" class="grid" aria-label="百ます"></div>
       </div>
@@ -284,7 +318,7 @@
 
       <div class="hint">
         ・各マスで Enter を押すと、右へ移動します（右端では次の行の左端）。<br>
-        ・URL の ?values=... と ?op=... を読むので、リンク共有で同じ問題を再現できます。
+        ・URL の ?values=...（40文字）と ?op=... を読むので、リンク共有で同じ問題を再現できます。
       </div>
     </section>
   </div>
@@ -292,7 +326,8 @@
 <script>
 (() => {
   const SIZE = 10;
-  const DEFAULT_RANGE = { min: 0, max: 99 }; // ランダム生成用（0〜99）
+  const VALUE_MIN = 0;
+  const VALUE_MAX = 99;
 
   const els = {
     opSelect: document.getElementById('opSelect'),
@@ -304,6 +339,7 @@
 
     topInputs: document.getElementById('topInputs'),
     leftInputs: document.getElementById('leftInputs'),
+    randRange: document.getElementById('randRange'),
     randomBtn: document.getElementById('randomBtn'),
     applyUrlBtn: document.getElementById('applyUrlBtn'),
     copyUrlBtn: document.getElementById('copyUrlBtn'),
@@ -312,19 +348,26 @@
     finishBtn: document.getElementById('finishBtn'),
     resetBtn: document.getElementById('resetBtn'),
     timer: document.getElementById('timer'),
+    expr: document.getElementById('expr'),
     grid: document.getElementById('grid'),
     result: document.getElementById('result'),
   };
 
   const state = {
     mode: 'solve', // 'make' | 'solve'
-    op: 'add',
+    op: 'add',     // 'add' | 'sub'
     top: new Array(SIZE).fill(0),
     left: new Array(SIZE).fill(0),
+
     started: false,
     startAt: 0,
     timerId: null,
+
     answerInputs: [], // 100 inputs
+    cornerEl: null,
+    topHeadEls: [],
+    leftHeadEls: [],
+    active: { r: 0, c: 0 }, // currently focused cell
   };
 
   function pad2(n){ return String(n).padStart(2,'0'); }
@@ -348,31 +391,14 @@
 
   function opFn(op){
     switch(op){
-      case 'add': return (l,t) => l + t;
       case 'sub': return (l,t) => l - t; // 左 − 上
-      case 'mul':
-      default: return (l,t) => l * t;
+      case 'add':
+      default: return (l,t) => l + t;
     }
   }
 
-  // values: 20 chars, each base36 (0-9A-Z) => 0..35
-  function encodeValues(arr20){
-    return arr20.map(v => {
-      const x = clampInt(v, 0, 35);
-      return x.toString(36).toUpperCase();
-    }).join('');
-  }
-
-  function decodeValues(str){
-    const s = (str ?? '').trim().toUpperCase();
-    if(s.length < 20) return null;
-    const arr = [];
-    for(let i=0; i<20; i++){
-      const v = parseInt(s[i], 36);
-      if(Number.isNaN(v)) return null;
-      arr.push(v);
-    }
-    return arr;
+  function opSymbol(op){
+    return op === 'sub' ? '−' : '+';
   }
 
   function clampInt(v, min, max){
@@ -383,6 +409,45 @@
 
   function randInt(min, max){
     return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  // values: 2 chars per number (base36), 20 numbers => 40 chars
+  function encodeValues20(arr20){
+    return arr20.map(v => {
+      const x = clampInt(v, VALUE_MIN, VALUE_MAX);
+      return x.toString(36).toUpperCase().padStart(2, '0');
+    }).join('');
+  }
+
+  function decodeValues20(str){
+    const s = (str ?? '').trim().toUpperCase();
+    if(s.length >= 40){
+      const arr = [];
+      for(let i=0; i<40; i+=2){
+        const chunk = s.slice(i, i+2);
+        const v = parseInt(chunk, 36);
+        if(Number.isNaN(v)) return null;
+        arr.push(v);
+      }
+      return arr.slice(0, 20);
+    }
+
+    // 旧形式(1文字×20)の互換: 0..35 のみ
+    if(s.length >= 20){
+      const arr = [];
+      for(let i=0; i<20; i++){
+        const v = parseInt(s[i], 36);
+        if(Number.isNaN(v)) return null;
+        arr.push(v);
+      }
+      return arr;
+    }
+
+    return null;
+  }
+
+  function getParams(){
+    return new URLSearchParams(location.search);
   }
 
   function setMode(mode){
@@ -400,41 +465,10 @@
     }
   }
 
-  function getParams(){
-    return new URLSearchParams(location.search);
-  }
-
-  function applyFromUrl(){
-    const params = getParams();
-
-    // op
-    const op = params.get('op');
-    state.op = (op === 'add' || op === 'sub' || op === 'mul') ? op : 'mul';
-    els.opSelect.value = state.op;
-
-    // values
-    const valuesStr = params.get('values');
-    const decoded = decodeValues(valuesStr);
-    if(decoded){
-      state.top = decoded.slice(0, 10);
-      state.left = decoded.slice(10, 20);
-    }else{
-      // 初期値：ランダム（1〜9）
-      randomizeValues(DEFAULT_RANGE.min, DEFAULT_RANGE.max);
-    }
-
-    // mode
-    const mode = params.get('mode');
-    setMode(mode === 'make' ? 'make' : 'solve');
-
-    renderMakerInputs();
-    renderGridHeaders();
-  }
-
   function updateUrl({ replace = true } = {}){
     const params = new URLSearchParams(location.search);
     params.set('op', state.op);
-    params.set('values', encodeValues([...state.top, ...state.left]));
+    params.set('values', encodeValues20([...state.top, ...state.left]));
     params.set('mode', state.mode === 'make' ? 'make' : 'solve');
 
     const newUrl = `${location.pathname}?${params.toString()}`;
@@ -442,9 +476,50 @@
     else history.pushState(null, '', newUrl);
   }
 
-  function randomizeValues(min, max){
-    state.top = Array.from({length: 10}, () => randInt(min, max));
-    state.left = Array.from({length: 10}, () => randInt(min, max));
+  function randomizeValues(){
+    const mode = els.randRange.value; // "0-9" | "0-99"
+    const max = (mode === '0-99') ? 99 : 9;
+    state.top = Array.from({length: 10}, () => randInt(0, max));
+    state.left = Array.from({length: 10}, () => randInt(0, max));
+  }
+
+  function renderCorner(){
+    if(!state.cornerEl) return;
+    const isSub = state.op === 'sub';
+    state.cornerEl.classList.toggle('mode-add', !isSub);
+    state.cornerEl.classList.toggle('mode-sub', isSub);
+    state.cornerEl.textContent = isSub ? '−' : '+';
+    state.cornerEl.setAttribute('aria-label', isSub ? 'ひき算モード' : 'たし算モード');
+  }
+
+  function renderExpr(){
+    const r = state.active.r;
+    const c = state.active.c;
+    const leftVal = state.left[r];
+    const topVal = state.top[c];
+    const sym = opSymbol(state.op);
+
+    const opClass = state.op === 'sub' ? 'sub' : 'add';
+    els.expr.innerHTML = `<span>${leftVal}</span> <span class="op ${opClass}">${sym}</span> <span>${topVal}</span> <span>= ?</span>`;
+  }
+
+  function clearHeaderHighlights(){
+    state.topHeadEls.forEach(el => el.classList.remove('active'));
+    state.leftHeadEls.forEach(el => el.classList.remove('active'));
+  }
+
+  function setHeaderHighlights(r, c){
+    clearHeaderHighlights();
+    const topEl = state.topHeadEls[c];
+    const leftEl = state.leftHeadEls[r];
+    if(topEl) topEl.classList.add('active');
+    if(leftEl) leftEl.classList.add('active');
+  }
+
+  function setActiveCell(r, c){
+    state.active = { r, c };
+    setHeaderHighlights(r, c);
+    renderExpr();
   }
 
   function renderMakerInputs(){
@@ -454,18 +529,19 @@
     const makeInput = (idx, kind) => {
       const input = document.createElement('input');
       input.type = 'number';
-      input.min = '0';
-      input.max = '35';
+      input.min = String(VALUE_MIN);
+      input.max = String(VALUE_MAX);
       input.step = '1';
       input.value = String(kind === 'top' ? state.top[idx] : state.left[idx]);
       input.setAttribute('aria-label', (kind === 'top' ? `上${idx+1}` : `左${idx+1}`));
 
       input.addEventListener('input', () => {
-        const v = clampInt(input.value, 0, 35);
+        const v = clampInt(input.value, VALUE_MIN, VALUE_MAX);
         input.value = String(v);
         if(kind === 'top') state.top[idx] = v;
         else state.left[idx] = v;
         renderGridHeaders();
+        renderExpr();
       });
 
       return input;
@@ -482,11 +558,13 @@
   function buildGrid(){
     els.grid.innerHTML = '';
     state.answerInputs = [];
+    state.topHeadEls = [];
+    state.leftHeadEls = [];
 
     // 角（左上）
     const corner = document.createElement('div');
     corner.className = 'corner';
-    corner.textContent = ' ';
+    state.cornerEl = corner;
     els.grid.appendChild(corner);
 
     // 上段ヘッダ（10）
@@ -496,6 +574,7 @@
       d.dataset.head = 'top';
       d.dataset.index = String(c);
       els.grid.appendChild(d);
+      state.topHeadEls.push(d);
     }
 
     // 行ごとに：左ヘッダ + 10入力
@@ -505,6 +584,7 @@
       h.dataset.head = 'left';
       h.dataset.index = String(r);
       els.grid.appendChild(h);
+      state.leftHeadEls.push(h);
 
       for(let c=0; c<SIZE; c++){
         const input = document.createElement('input');
@@ -516,6 +596,10 @@
         input.dataset.r = String(r);
         input.dataset.c = String(c);
 
+        input.addEventListener('focusin', () => {
+          setActiveCell(r, c);
+        });
+
         // Enterで次へ
         input.addEventListener('keydown', (e) => {
           if(e.key === 'Enter'){
@@ -524,7 +608,7 @@
           }
         });
 
-        // 余計な文字を軽く正規化（全角数字など）
+        // 正規化
         input.addEventListener('blur', () => {
           input.value = normalizeNumberString(input.value);
         });
@@ -536,16 +620,13 @@
   }
 
   function renderGridHeaders(){
-    const tops = els.grid.querySelectorAll('[data-head="top"]');
-    tops.forEach(el => {
-      const i = Number(el.dataset.index);
+    state.topHeadEls.forEach((el, i) => {
       el.textContent = String(state.top[i]);
     });
-    const lefts = els.grid.querySelectorAll('[data-head="left"]');
-    lefts.forEach(el => {
-      const i = Number(el.dataset.index);
+    state.leftHeadEls.forEach((el, i) => {
       el.textContent = String(state.left[i]);
     });
+    renderCorner();
   }
 
   function cellIndex(r, c){
@@ -627,6 +708,37 @@
       `タイム：${formatMs(elapsed)}`;
   }
 
+  function applyFromUrl(){
+    const params = getParams();
+
+    // op（デフォルト add）
+    const op = params.get('op');
+    state.op = (op === 'sub' || op === 'add') ? op : 'add';
+    els.opSelect.value = state.op;
+
+    // values
+    const valuesStr = params.get('values');
+    const decoded = decodeValues20(valuesStr);
+    if(decoded){
+      state.top = decoded.slice(0, 10).map(v => clampInt(v, VALUE_MIN, VALUE_MAX));
+      state.left = decoded.slice(10, 20).map(v => clampInt(v, VALUE_MIN, VALUE_MAX));
+    }else{
+      // 初期値：0〜9ランダム
+      els.randRange.value = '0-9';
+      randomizeValues();
+    }
+
+    // mode
+    const mode = params.get('mode');
+    setMode(mode === 'make' ? 'make' : 'solve');
+
+    renderMakerInputs();
+    renderGridHeaders();
+
+    // active / expr / highlight 初期化
+    setActiveCell(0, 0);
+  }
+
   // Events
   els.toggleModeBtn.addEventListener('click', () => {
     setMode(state.mode === 'make' ? 'solve' : 'make');
@@ -634,21 +746,22 @@
   });
 
   els.opSelect.addEventListener('change', () => {
-    state.op = els.opSelect.value;
+    state.op = els.opSelect.value; // add | sub
+    renderCorner();
+    renderExpr();
     updateUrl({ replace: true });
-    // 解答を残したままでもよいが、混乱しやすいので軽く注意喚起兼で結果は消す
     clearMarks();
   });
 
   els.randomBtn.addEventListener('click', () => {
-    randomizeValues(DEFAULT_RANGE.min, DEFAULT_RANGE.max);
+    randomizeValues();
     renderMakerInputs();
     renderGridHeaders();
+    renderExpr();
   });
 
   els.applyUrlBtn.addEventListener('click', () => {
     updateUrl({ replace: true });
-    // 作問モードで共有しやすいように、mode=make のままにします
   });
 
   els.copyUrlBtn.addEventListener('click', async () => {
@@ -658,7 +771,6 @@
       els.copyUrlBtn.textContent = 'コピーしました';
       setTimeout(() => els.copyUrlBtn.textContent = 'URLをコピー', 1200);
     }catch(_){
-      // Clipboardが使えない環境向け
       prompt('このURLをコピーしてください', location.href);
     }
   });
@@ -688,7 +800,6 @@
   buildGrid();
   applyFromUrl();
 
-  // 戻る/進む対応
   window.addEventListener('popstate', () => {
     applyFromUrl();
     resetAnswers();

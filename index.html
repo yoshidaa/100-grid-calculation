@@ -6,7 +6,9 @@
   <title>百ます計算</title>
   <style>
     :root{
-      --bg: #0b0f17;
+      
+      --gap: var(--gap);
+--bg: #0b0f17;
       --text: #e9eefc;
       --muted: #a9b4d1;
       --line: rgba(255,255,255,.12);
@@ -34,7 +36,7 @@
     .wrap{
       max-width: 980px;
       margin: 0 auto;
-      padding: 14px 12px 28px;
+      padding: 4px 2px 28px;
     }
 
     header{
@@ -150,7 +152,7 @@
       display:grid;
       grid-template-columns: var(--header) repeat(10, var(--cell));
       grid-auto-rows: var(--cell);
-      gap: 6px;
+      gap: var(--gap);
       width: max-content;
       margin: 0 auto;
       padding: 10px 6px 6px;
@@ -186,6 +188,19 @@
       border-color: rgba(255, 215, 0, .55);
     }
 
+    #makerPanel input{
+      width: 100%;
+      height: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,.18);
+      padding: 1px;
+      color: var(--text);
+      text-align: center;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      outline: none;
+    }
     input.answer{
       width: 100%;
       height: 100%;
@@ -257,11 +272,91 @@
       background: rgba(255,255,255,.04);
     }
 
+    footer{
+      padding: 5px;
+      text-align: center;
+    }
+
     @media (max-width: 420px){
       .timer{ font-size: 14px; }
       button, select{ padding: 9px 10px; }
       .expr{ font-size: 16px; }
     }
+
+    /* Mobile: 画面幅に“必ず”収める（11列を等幅の正方形に） + ツールバーを1行に */
+    @media (max-width: 520px){
+      .wrap{ padding: 10px 8px 22px; }
+
+      header{ gap: 10px; }
+      h1{ font-size: 16px; }
+
+      /* 「解答モード」「作問モードへ」等が2行にならないように */
+      .toolbar{
+        flex-wrap: nowrap;
+        gap: var(--gap);
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none; /* Firefox */
+      }
+      .toolbar::-webkit-scrollbar{ display:none; }
+      .toolbar > *{
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
+      button, select, .modeBadge{ white-space: nowrap; }
+
+      button, select{ padding: 8px 10px; font-size: 13px; }
+      .timer{ font-size: 13px; padding: 7px 9px; }
+      .expr{ font-size: 15px; padding: 9px 10px; }
+
+      :root{
+        --gap: 2px;
+      }
+
+      /* 横スクロールなしで 11列（角+10列）を画面幅に収める */
+      .gridWrap{
+        overflow-x: hidden;
+        padding-bottom: 0;
+      }
+      .grid{
+        width: 100%;
+        margin: 0;
+        padding: 6px 0 4px;
+        grid-template-columns: repeat(11, minmax(0, 1fr));
+        grid-auto-rows: auto;
+      }
+
+      /* すべて正方形にする */
+      .corner, .head, input.answer{
+        aspect-ratio: 1 / 1;
+        height: auto;
+        min-height: 0;
+        border-radius: 8px;
+      }
+      .head{ font-size: clamp(11px, 3.3vw, 14px); }
+      input.answer{
+        display: block;
+        padding: 0;
+        font-size: clamp(11px, 3.3vw, 14px);
+      }
+    }
+
+    /* Very small phones */
+    @media (max-width: 360px){
+      :root{ --gap: 1px; }
+      h1{ font-size: 15px; }
+      button, select{ padding: 8px 9px; font-size: 12px; }
+      .expr{ font-size: 14px; }
+      .head{ font-size: clamp(10px, 3.5vw, 13px); }
+      input.answer{ font-size: clamp(10px, 3.5vw, 13px); }
+    }
+
+      .grid{ padding: 6px 2px 4px; }
+      button, select{ padding: 8px 9px; font-size: 12px; }
+      .expr{ font-size: 14px; }
+    }
+
   </style>
 </head>
 
@@ -272,8 +367,8 @@
       <div class="toolbar">
         <span id="modeBadge" class="modeBadge">解答モード</span>
         <select id="opSelect" aria-label="演算">
-          <option value="add">＋（たし算）</option>
-          <option value="sub">−（ひき算：左 − 上）</option>
+          <option value="add">＋(たし算)</option>
+          <option value="sub">‐(ひき算:左−上)</option>
         </select>
         <button id="toggleModeBtn">作問モードへ</button>
       </div>
@@ -283,9 +378,6 @@
     <section id="makerPanel" class="panel" style="display:none;">
       <div class="row">
         <div class="left">
-          <p class="sectionTitle">上段10個（values の先頭10個）</p>
-        </div>
-        <div class="left">
           <label class="sectionTitle" for="randRange">ランダム範囲</label>
           <select id="randRange" aria-label="ランダム範囲">
             <option value="0-9">0〜9</option>
@@ -294,6 +386,9 @@
           <button id="randomBtn">ランダム生成</button>
           <button id="applyUrlBtn">URLに反映</button>
           <button id="copyUrlBtn">URLをコピー</button>
+        </div>
+        <div class="left">
+          <p class="sectionTitle">上段10個（values の先頭10個）</p>
         </div>
       </div>
 
@@ -305,7 +400,7 @@
       <div id="leftInputs" class="makerGrid" aria-label="左列の値"></div>
 
       <div class="hint">
-        ・数字は 0〜99。values は <b>2文字×20個</b> の base36（0-9A-Z）でエンコードします（合計40文字）。<br>
+        ・数字は 0～99。values は <b>2文字×20個</b> の base36（0-9A-Z）でエンコードします（合計40文字）。<br>
         ・ランダム生成では、上段10個の中／左列10個の中で同じ数字が重複しないようにします。<br>
         ・作問が終わったら「URLに反映」を押して、そのURLを共有してください。
       </div>
@@ -333,11 +428,13 @@
       <div id="result" class="result"></div>
 
       <div class="hint">
-        ・「スタート」を押すまで入力はできません。<br>
-        ・各マスで Enter を押すと、右へ移動します（右端では次の行の左端）。<br>
-        ・URL の ?values=...（40文字）と ?op=... を読むので、リンク共有で同じ問題を再現できます。
+        ・スタートボタンを押すまで解答は始まりません。<br />
+        ・各マスで Enter/改行 を押すと、次のマスへ移動します。<br />
       </div>
     </section>
+    <footer>
+     (c) 2026 Yoshida Labo.
+    </footer>
   </div>
 
 <script>

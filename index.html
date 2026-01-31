@@ -115,7 +115,7 @@
       margin-top: 10px;
       text-align:center;
       font-variant-numeric: tabular-nums;
-      font-weight: 700;
+      font-weight: 800;
       letter-spacing: .01em;
       font-size: 18px;
       padding: 10px 10px;
@@ -123,6 +123,17 @@
       border: 1px solid var(--line);
       background: rgba(0,0,0,.20);
       user-select:none;
+      min-height: 44px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .expr.notice{
+      font-weight: 650;
+      color: var(--muted);
+      letter-spacing: .02em;
     }
     .expr .op.add{ color: #ffb3b3; }
     .expr .op.sub{ color: #b7d0ff; }
@@ -149,7 +160,7 @@
       display:flex; align-items:center; justify-content:center;
       border-radius: 10px;
       font-size: 16px;
-      font-weight: 800;
+      font-weight: 900;
       letter-spacing: .02em;
       user-select:none;
       border: 1px solid rgba(255,255,255,.10);
@@ -190,6 +201,10 @@
     input.answer:focus{
       border-color: rgba(255,255,255,.35);
       box-shadow: 0 0 0 2px rgba(255,255,255,.10);
+    }
+    input.answer:disabled{
+      opacity: .55;
+      cursor: not-allowed;
     }
 
     input.answer.correct{
@@ -291,6 +306,7 @@
 
       <div class="hint">
         ・数字は 0〜99。values は <b>2文字×20個</b> の base36（0-9A-Z）でエンコードします（合計40文字）。<br>
+        ・ランダム生成では、上段10個の中／左列10個の中で同じ数字が重複しないようにします。<br>
         ・作問が終わったら「URLに反映」を押して、そのURLを共有してください。
       </div>
     </section>
@@ -308,7 +324,7 @@
         </div>
       </div>
 
-      <div id="expr" class="expr" aria-live="polite">—</div>
+      <div id="expr" class="expr notice" aria-live="polite">スタートを押してください</div>
 
       <div class="gridWrap">
         <div id="grid" class="grid" aria-label="百ます"></div>
@@ -317,6 +333,7 @@
       <div id="result" class="result"></div>
 
       <div class="hint">
+        ・「スタート」を押すまで入力はできません。<br>
         ・各マスで Enter を押すと、右へ移動します（右端では次の行の左端）。<br>
         ・URL の ?values=...（40文字）と ?op=... を読むので、リンク共有で同じ問題を再現できます。
       </div>
@@ -359,7 +376,8 @@
     top: new Array(SIZE).fill(0),
     left: new Array(SIZE).fill(0),
 
-    started: false,
+    started: false,   // タイマーが動いているか
+    unlocked: false,  // 入力可能か（スタート後）
     startAt: 0,
     timerId: null,
 
@@ -409,6 +427,46 @@
 
   function randInt(min, max){
     return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function shuffleInPlace(arr){
+    for(let i=arr.length - 1; i>0; i--){
+      const j = randInt(0, i);
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  }
+
+  function sampleUnique(count, min, max){
+    const n = max - min + 1;
+    if(count > n) throw new Error('sampleUnique: count exceeds range');
+
+    // range全部が必要な場合はシャッフルが最速
+    if(count === n){
+      const arr = Array.from({length:n}, (_,i) => min + i);
+      shuffleInPlace(arr);
+      return arr.slice(0, count);
+    }
+
+    // countが小さいのでSetで十分
+    const set = new Set();
+    const arr = [];
+    while(arr.length < count){
+      const v = randInt(min, max);
+      if(set.has(v)) continue;
+      set.add(v);
+      arr.push(v);
+    }
+    return arr;
+  }
+
+  function setInputsEnabled(enabled){
+    state.answerInputs.forEach(inp => {
+      inp.disabled = !enabled;
+    });
+  }
+
+  function setStartButtonEnabled(enabled){
+    els.startBtn.disabled = !enabled;
   }
 
   // values: 2 chars per number (base36), 20 numbers => 40 chars
@@ -479,8 +537,10 @@
   function randomizeValues(){
     const mode = els.randRange.value; // "0-9" | "0-99"
     const max = (mode === '0-99') ? 99 : 9;
-    state.top = Array.from({length: 10}, () => randInt(0, max));
-    state.left = Array.from({length: 10}, () => randInt(0, max));
+
+    // ★上段10個の中で重複なし／左列10個の中で重複なし
+    state.top  = sampleUnique(10, 0, max);
+    state.left = sampleUnique(10, 0, max);
   }
 
   function renderCorner(){
@@ -493,6 +553,14 @@
   }
 
   function renderExpr(){
+    if(!state.unlocked){
+      els.expr.classList.add('notice');
+      els.expr.textContent = 'スタートを押してください';
+      return;
+    }
+
+    els.expr.classList.remove('notice');
+
     const r = state.active.r;
     const c = state.active.c;
     const leftVal = state.left[r];
@@ -518,7 +586,11 @@
 
   function setActiveCell(r, c){
     state.active = { r, c };
-    setHeaderHighlights(r, c);
+    if(state.unlocked){
+      setHeaderHighlights(r, c);
+    }else{
+      clearHeaderHighlights();
+    }
     renderExpr();
   }
 
@@ -658,10 +730,17 @@
   function resetAnswers(){
     stopTimer();
     state.started = false;
+    state.unlocked = false;      // リセットしたら再ロック
     els.finishBtn.disabled = true;
+
     state.answerInputs.forEach(inp => inp.value = '');
     clearMarks();
+    clearHeaderHighlights();
+
     els.timer.textContent = '00:00.000';
+    setInputsEnabled(false);
+    setStartButtonEnabled(true);
+    renderExpr();
   }
 
   function startTimer(){
@@ -723,7 +802,7 @@
       state.top = decoded.slice(0, 10).map(v => clampInt(v, VALUE_MIN, VALUE_MAX));
       state.left = decoded.slice(10, 20).map(v => clampInt(v, VALUE_MIN, VALUE_MAX));
     }else{
-      // 初期値：0〜9ランダム
+      // 初期値：0〜9ランダム（重複なし）
       els.randRange.value = '0-9';
       randomizeValues();
     }
@@ -735,8 +814,14 @@
     renderMakerInputs();
     renderGridHeaders();
 
-    // active / expr / highlight 初期化
-    setActiveCell(0, 0);
+    // 初期はロック
+    state.started = false;
+    state.unlocked = false;
+    setInputsEnabled(false);
+    setStartButtonEnabled(true);
+    els.finishBtn.disabled = true;
+
+    setActiveCell(0, 0); // expr は「スタートを押してください」になる
   }
 
   // Events
@@ -776,10 +861,22 @@
   });
 
   els.startBtn.addEventListener('click', () => {
+    if(state.started) return;
+
     clearMarks();
+
+    // スタート押下後はリセット or 終わるまで押せない
+    setStartButtonEnabled(false);
+
+    // ここで解放
+    state.unlocked = true;
+    setInputsEnabled(true);
+
     state.started = true;
     els.finishBtn.disabled = false;
     startTimer();
+
+    // フォーカス移動（focusinでハイライト＆expr更新）
     focusCell(0,0);
   });
 
@@ -787,13 +884,17 @@
     if(!state.started) return;
     stopTimer();
     checkAnswers();
+
     state.started = false;
     els.finishBtn.disabled = true;
+
+    // 終わるを押したらスタート再開可能
+    setStartButtonEnabled(true);
+    // unlocked は維持（結果の見直し・修正を許可）
   });
 
   els.resetBtn.addEventListener('click', () => {
     resetAnswers();
-    focusCell(0,0);
   });
 
   // Init
